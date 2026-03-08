@@ -1,10 +1,13 @@
+
+
 const path = require('path');
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
 const Rooms = require('./rooms');
-
+const { createClient } = require('redis');
+const { createAdapter } = require('@socket.io/redis-adapter');
 const PORT = process.env.PORT || 3000;
 const CLIENT_DIR = path.join(__dirname, '..', 'client');
 
@@ -18,7 +21,9 @@ const io = new Server(server, {
   pingInterval: 20000,
   pingTimeout: 20000,
 });
-
+// Redis setup
+const pubClient = createClient({ url: "redis://localhost:6379" });
+const subClient = pubClient.duplicate();
 const rooms = new Rooms();
 
 io.on('connection', socket => {
@@ -134,7 +139,18 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(CLIENT_DIR, 'index.html'));
 });
 
-server.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Server listening on http://localhost:${PORT}`);
-});
+async function startServer() {
+
+  await pubClient.connect();
+  await subClient.connect();
+
+  io.adapter(createAdapter(pubClient, subClient));
+
+  server.listen(PORT, () => {
+    console.log(`Server listening on http://localhost:${PORT}`);
+  });
+
+}
+
+startServer();
+
